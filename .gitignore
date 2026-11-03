@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+*/node_modules/
+venv/
+*/venv/
+.venv/
+*/.venv/
+.pgsql/
+*/.pgsql/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+*/.env
+!.env.example
+!*/.env.example
+
+# Logs & temp
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Local test and temporary files
+.pytest_cache/
+scratch/
+
+# Protect all environment variants
+.env.*
+*/.env.*
+!.env.example
+!*/.env.example

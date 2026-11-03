@@ -1,0 +1,36 @@
+{
+  "name": "firesync-satellite-intelligence",
+  "version": "1.0.0",
+  "description": "FireSync – Unified Satellite Fire Intelligence for NASA Space Apps Challenge 2026",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:fastapi": "powershell -Command \"& '.\\scientific-service\\venv\\Scripts\\python.exe' .\\scientific-service\\run.py\"",
+    "dev:fastapi:bash": "bash -c './scientific-service/venv/bin/python ./scientific-service/run.py'",
+    "dev:all": "concurrently -n \"BACKEND,FASTAPI,FRONTEND\" -c \"blue,yellow,magenta\" \"npm run dev:backend\" \"npm run dev:fastapi\" \"npm run dev:frontend\"",
+    "build:frontend": "npm --prefix frontend run build",
+    "ingest:firms": "npm --prefix backend run ingest:firms",
+    "test": "npm --prefix backend test",
+    "test:python": "powershell -Command \"$env:PYTHONPATH='scientific-service'; & '.\\scientific-service\\venv\\Scripts\\python.exe' -m pytest scientific-service\\tests\"",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
+  },
+  "keywords": [
+    "nasa",
+    "space-apps-challenge-2026",
+    "wildfire",
+    "satellite-intelligence",
+    "modis",
+    "viirs",
+    "fastapi",
+    "express",
+    "postgis",
+    "react",
+    "leaflet",
+    "plotly"
+  ],
+  "author": "FireSync Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}
