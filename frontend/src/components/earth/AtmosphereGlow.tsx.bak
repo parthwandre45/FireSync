@@ -1,0 +1,104 @@
+import React, { useMemo } from 'react';
+import * as THREE from 'three';
+
+const atmosphereVertexShader = `
+varying vec3 vNormal;
+varying vec3 vViewDir;
+
+void main() {
+  vNormal = normalize(normalMatrix * normal);
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  vViewDir = normalize(-mvPosition.xyz);
+  gl_Position = projectionMatrix * mvPosition;
+}
+`;
+
+const atmosphereFragmentShader = `
+varying vec3 vNormal;
+varying vec3 vViewDir;
+uniform vec3 uColor;
+uniform float uRimPower;
+uniform float uIntensity;
+
+void main() {
+  float rim = 1.0 - max(dot(vViewDir, vNormal), 0.0);
+  rim = pow(rim, uRimPower) * uIntensity;
+  gl_FragColor = vec4(uColor, rim);
+}
+`;
+
+interface AtmosphereGlowProps {
+  radius?: number;
+  color?: string;
+  intensity?: number;
+  power?: number;
+}
+
+export const AtmosphereGlow: React.FC<AtmosphereGlowProps> = ({
+  radius = 2.012,
+  color = '#0077dd',
+  intensity = 0.42,
+  power = 4.8,
+}) => {
+  const uniforms = useMemo(
+    () => ({
+      uColor: { value: new THREE.Color(color) },
+      uRimPower: { value: power },
+      uIntensity: { value: intensity },
+    }),
+    [color, power, intensity]
+  );
+
+  return (
+    <>
+      {/* Inner atmospheric rim (Front side - subtle, thin grazing rim) */}
+      <mesh>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial
+          vertexShader={atmosphereVertexShader}
+          fragmentShader={atmosphereFragmentShader}
+          uniforms={uniforms}
+          blending={THREE.AdditiveBlending}
+          transparent={true}
+          side={THREE.FrontSide}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Outer atmospheric aura (Back side - very delicate, subtle limb halo) */}
+      <mesh>
+        <sphereGeometry args={[radius * 1.025, 64, 64]} />
+        <shaderMaterial
+          vertexShader={`
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            void main() {
+              vNormal = normalize(normalMatrix * normal);
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              vViewDir = normalize(-mvPosition.xyz);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `}
+          fragmentShader={`
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            uniform vec3 uColor;
+            void main() {
+              float rim = dot(vViewDir, -vNormal);
+              rim = pow(max(rim, 0.0), 5.5) * 0.15;
+              gl_FragColor = vec4(uColor, rim);
+            }
+          `}
+          uniforms={{
+            uColor: { value: new THREE.Color('#0055bb') },
+          }}
+          blending={THREE.AdditiveBlending}
+          transparent={true}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </>
+  );
+};
+

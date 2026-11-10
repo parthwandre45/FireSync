@@ -1,0 +1,133 @@
+import React, { useRef, useMemo, useCallback } from 'react';
+import * as THREE from 'three';
+import { useFrame, useLoader } from '@react-three/fiber';
+import { AtmosphereGlow } from './AtmosphereGlow';
+import { FireHotspots } from './FireHotspots';
+import { createWildfireEmissiveTexture } from './fireTextureGenerator';
+
+interface EarthGlobeProps {
+  radius?: number;
+  rotationSpeed?: number;
+  sunDirection?: THREE.Vector3;
+}
+
+export const EarthGlobe: React.FC<EarthGlobeProps> = ({
+  radius = 2.0,
+  rotationSpeed = 0.22, // Fast, dynamic Earth rotation
+  sunDirection,
+}) => {
+  const earthGroupRef = useRef<THREE.Group>(null);
+  const cloudsRef = useRef<THREE.Mesh>(null);
+  const surfaceMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  // Load NASA planetary textures
+  const [dayMap, normalMap, specularMap, cloudsMap] = useLoader(
+    THREE.TextureLoader,
+    [
+      '/textures/earth_daymap.jpg',
+      '/textures/earth_normal.jpg',
+      '/textures/earth_specular.jpg',
+      '/textures/earth_clouds.png',
+    ]
+  );
+
+  // Generate authentic branching wildfire emission texture (spider-web ember veins & white-hot fronts)
+  const wildfireEmissiveMap = useMemo(() => createWildfireEmissiveTexture(), []);
+
+  // Configure texture filters and color space for maximum photorealism
+  useMemo(() => {
+    [dayMap, cloudsMap].forEach((tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+    });
+  }, [dayMap, cloudsMap]);
+
+  // Hook into shader compilation to invert NASA specular mask into true physical roughness:
+  // Water (high specular) -> low roughness (~0.12) creating authentic NASA sunglint
+  // Land (zero specular) -> high roughness (~0.88) maintaining natural matte dielectric terrain
+  const handleBeforeCompile = useCallback((shader: any) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <roughnessmap_fragment>',
+      `
+      float roughnessFactor = roughness;
+      #ifdef USE_ROUGHNESSMAP
+        vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );
+        roughnessFactor = roughness * (1.0 - texelRoughness.r * 0.86);
+      #endif
+      `
+    );
+  }, []);
+
+  useFrame(({ clock }, delta) => {
+    const time = clock.getElapsedTime();
+
+    // Smooth continuous Earth axial rotation (never resets)
+    if (earthGroupRef.current) {
+      earthGroupRef.current.rotation.y += delta * rotationSpeed;
+    }
+
+    // Atmospheric cloud circulation (moves slightly faster than Earth's surface)
+    if (cloudsRef.current) {
+      cloudsRef.current.rotation.y += delta * (rotationSpeed * 1.15);
+    }
+
+    // Dynamic turbulent fire respiration on planetary surface
+    if (surfaceMaterialRef.current) {
+      const firePulse =
+        2.6 +
+        Math.sin(time * 3.8) * 0.35 +
+        Math.cos(time * 9.2) * 0.15;
+      surfaceMaterialRef.current.emissiveIntensity = firePulse;
+    }
+  });
+
+  return (
+    <group ref={earthGroupRef} rotation={[0.22, 1.2, 0]}>
+      {/* 1. Base Earth Surface with Integrated Wildfire Emissive Networks */}
+      <mesh castShadow receiveShadow>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <meshStandardMaterial
+          ref={surfaceMaterialRef}
+          map={dayMap}
+          normalMap={normalMap}
+          normalScale={new THREE.Vector2(0.40, 0.40)}
+          roughnessMap={specularMap}
+          roughness={0.88}
+          metalness={0.02}
+          emissiveMap={wildfireEmissiveMap}
+          emissive={new THREE.Color('#ff7722')}
+          emissiveIntensity={2.8}
+          onBeforeCompile={handleBeforeCompile}
+        />
+      </mesh>
+
+      {/* 2. 3D Active Flaming Points & Thermal Embers (Dancing flame nodes) */}
+      <FireHotspots radius={radius} />
+
+      {/* 3. Swirling Atmospheric Cloud Layer (Separated by 0.016 units for natural altitude depth) */}
+      <mesh ref={cloudsRef}>
+        <sphereGeometry args={[radius * 1.008, 64, 64]} />
+        <meshStandardMaterial
+          map={cloudsMap}
+          transparent={true}
+          opacity={0.36}
+          blending={THREE.NormalBlending}
+          depthWrite={false}
+          roughness={1.0}
+          metalness={0.0}
+          color="#f4f8fc"
+        />
+      </mesh>
+
+      {/* 4. Subtle, Thin Blue Atmospheric Rim (Rayleigh sun-modulated) */}
+      <AtmosphereGlow
+        radius={radius * 1.008}
+        color="#40b5ff"
+        intensity={0.32}
+        power={6.2}
+        sunDirection={sunDirection}
+      />
+    </group>
+  );
+};

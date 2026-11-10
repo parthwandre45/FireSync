@@ -1,0 +1,133 @@
+import React, { useMemo } from 'react';
+import * as THREE from 'three';
+
+const atmosphereVertexShader = `
+varying vec3 vNormal;
+varying vec3 vViewDir;
+varying vec3 vWorldNormal;
+
+void main() {
+  vNormal = normalize(normalMatrix * normal);
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  vViewDir = normalize(-mvPosition.xyz);
+  vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+  gl_Position = projectionMatrix * mvPosition;
+}
+`;
+
+const atmosphereFragmentShader = `
+varying vec3 vNormal;
+varying vec3 vViewDir;
+varying vec3 vWorldNormal;
+uniform vec3 uColor;
+uniform float uRimPower;
+uniform float uIntensity;
+uniform vec3 uSunDirection;
+
+void main() {
+  // Thin grazing rim restricted to the very outer edge of the planetary disk
+  float rim = 1.0 - max(dot(vViewDir, vNormal), 0.0);
+  rim = pow(rim, uRimPower) * uIntensity;
+
+  // Rayleigh sun modulation: luminous cyan-blue along the sunlit limb, soft airglow on night limb
+  float sunDot = dot(vWorldNormal, uSunDirection);
+  float dayFactor = smoothstep(-0.15, 0.35, sunDot) * 0.90 + 0.10;
+  rim *= dayFactor;
+
+  gl_FragColor = vec4(uColor, rim);
+}
+`;
+
+interface AtmosphereGlowProps {
+  radius?: number;
+  color?: string;
+  intensity?: number;
+  power?: number;
+  sunDirection?: THREE.Vector3;
+}
+
+export const AtmosphereGlow: React.FC<AtmosphereGlowProps> = ({
+  radius = 2.016,
+  color = '#40b5ff',
+  intensity = 0.32,
+  power = 6.2,
+  sunDirection,
+}) => {
+  const defaultSunDir = useMemo(
+    () => sunDirection || new THREE.Vector3(-5, 4, 5).normalize(),
+    [sunDirection]
+  );
+
+  const uniforms = useMemo(
+    () => ({
+      uColor: { value: new THREE.Color(color) },
+      uRimPower: { value: power },
+      uIntensity: { value: intensity },
+      uSunDirection: { value: defaultSunDir },
+    }),
+    [color, power, intensity, defaultSunDir]
+  );
+
+  return (
+    <>
+      {/* 1. Thin inner atmospheric rim (Front side - razor-thin grazing glow on planetary edge) */}
+      <mesh>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <shaderMaterial
+          vertexShader={atmosphereVertexShader}
+          fragmentShader={atmosphereFragmentShader}
+          uniforms={uniforms}
+          blending={THREE.AdditiveBlending}
+          transparent={true}
+          side={THREE.FrontSide}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* 2. Micro outer atmospheric limb aura (Back side - closely hugging the limb, high power exponent for zero bloating) */}
+      <mesh>
+        <sphereGeometry args={[radius * 1.006, 64, 64]} />
+        <shaderMaterial
+          vertexShader={`
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vWorldNormal;
+            void main() {
+              vNormal = normalize(normalMatrix * normal);
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              vViewDir = normalize(-mvPosition.xyz);
+              vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `}
+          fragmentShader={`
+            varying vec3 vNormal;
+            varying vec3 vViewDir;
+            varying vec3 vWorldNormal;
+            uniform vec3 uColor;
+            uniform vec3 uSunDirection;
+            void main() {
+              float rim = dot(vViewDir, -vNormal);
+              // High power exponent (12.0) restricts the limb falloff to a whisper-thin razor line
+              rim = pow(max(rim, 0.0), 12.0) * 0.28;
+
+              float sunDot = dot(vWorldNormal, uSunDirection);
+              float dayFactor = smoothstep(-0.15, 0.35, sunDot) * 0.94 + 0.06;
+              rim *= dayFactor;
+
+              gl_FragColor = vec4(uColor, rim);
+            }
+          `}
+          uniforms={{
+            uColor: { value: new THREE.Color('#38bdf8') },
+            uSunDirection: { value: defaultSunDir },
+          }}
+          blending={THREE.AdditiveBlending}
+          transparent={true}
+          side={THREE.BackSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </>
+  );
+};
