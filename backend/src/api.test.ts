@@ -2,14 +2,19 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import http from 'http';
 
-function makeRequest(path: string, options: http.RequestOptions = {}): Promise<{ status: number; body: any }> {
+interface RequestOptionsWithBody extends http.RequestOptions {
+  body?: any;
+}
+
+function makeRequest(path: string, options: RequestOptionsWithBody = {}): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
+    const { body, ...clientOptions } = options;
     const req = http.request(
       {
         socketPath: '/tmp/firesync.sock',
         path,
-        method: options.method || 'GET',
-        headers: options.headers || {}
+        method: clientOptions.method || 'GET',
+        headers: clientOptions.headers || {}
       },
       (res) => {
         let rawData = '';

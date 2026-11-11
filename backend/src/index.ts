@@ -32,39 +32,47 @@ async function bootstrap() {
     logger.info(`Health check endpoint: http://localhost:${env.PORT}/api/v1/system/health`);
   });
 
-  // 2. Unix Domain Socket Server (for cross-sandbox access)
-  if (fs.existsSync(UNIX_SOCKET_PATH)) {
-    try {
-      fs.unlinkSync(UNIX_SOCKET_PATH);
-    } catch (e) {
-      // ignore
+  // 2. Unix Domain Socket Server (for cross-sandbox access on POSIX systems)
+  let socketServer: http.Server | null = null;
+  if (process.platform !== 'win32') {
+    if (fs.existsSync(UNIX_SOCKET_PATH)) {
+      try {
+        fs.unlinkSync(UNIX_SOCKET_PATH);
+      } catch (e) {
+        // ignore
+      }
     }
-  }
 
-  const socketServer = http.createServer(app);
-  socketServer.listen(UNIX_SOCKET_PATH, () => {
-    try {
-      fs.chmodSync(UNIX_SOCKET_PATH, '0777');
-    } catch (e) {
-      // ignore
-    }
-    logger.info(`FireSync IPC Socket listening on ${UNIX_SOCKET_PATH}`);
-  });
+    socketServer = http.createServer(app);
+    socketServer.listen(UNIX_SOCKET_PATH, () => {
+      try {
+        fs.chmodSync(UNIX_SOCKET_PATH, '0777');
+      } catch (e) {
+        // ignore
+      }
+      logger.info(`FireSync IPC Socket listening on ${UNIX_SOCKET_PATH}`);
+    });
+  }
 
   const shutdown = async () => {
     logger.info('Gracefully shutting down FireSync backend...');
     tcpServer.close();
-    socketServer.close(() => {
-      if (fs.existsSync(UNIX_SOCKET_PATH)) {
-        try {
-          fs.unlinkSync(UNIX_SOCKET_PATH);
-        } catch (e) {
-          // ignore
+    if (socketServer) {
+      socketServer.close(() => {
+        if (fs.existsSync(UNIX_SOCKET_PATH)) {
+          try {
+            fs.unlinkSync(UNIX_SOCKET_PATH);
+          } catch (e) {
+            // ignore
+          }
         }
-      }
-      logger.info('HTTP & Socket servers closed.');
+        logger.info('HTTP & Socket servers closed.');
+        process.exit(0);
+      });
+    } else {
+      logger.info('HTTP server closed.');
       process.exit(0);
-    });
+    }
   };
 
   process.on('SIGTERM', shutdown);
